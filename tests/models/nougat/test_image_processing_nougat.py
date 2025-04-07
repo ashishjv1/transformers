@@ -20,7 +20,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import cached_property, is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -32,6 +32,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import NougatImageProcessor
+
+    if is_torchvision_available():
+        from transformers import NougatImageProcessorFast
 
 
 class NougatImageProcessingTester:
@@ -109,10 +112,16 @@ class NougatImageProcessingTester:
 @require_vision
 class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = NougatImageProcessor if is_vision_available() else None
+    fast_image_processing_class = NougatImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
         self.image_processor_tester = NougatImageProcessingTester(self)
+        self.image_processor_list = []
+        if self.image_processing_class is not None:
+            self.image_processor_list.append(self.image_processing_class)
+        if self.fast_image_processing_class is not None:
+            self.image_processor_list.append(self.fast_image_processing_class)
 
     @property
     def image_processor_dict(self):
@@ -123,19 +132,23 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processing_class(**self.image_processor_dict)
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
+        for cls in self.image_processor_list:
+            image_processing = cls(**self.image_processor_dict)
+        # image_processing = self.image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 20, "width": 20})
-
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+        for cls in self.image_processor_list:
+            image_processor = cls.from_dict(self.image_processor_dict)
+            # image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 20, "width": 20})
+            image_processor = cls.from_dict(self.image_processor_dict, size=42)
+            # image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
+            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_expected_output(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
